@@ -3,6 +3,9 @@
 Install Dependencies:
 ```bash
 cd backend
+python -m venv venv
+source venv/bin/activate  # For Mac/Linux
+venv\Scripts\activate     # For Windows
 pip install -r requirements.txt
 ```
 
