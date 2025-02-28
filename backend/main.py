@@ -1,9 +1,11 @@
 from flask import Flask, jsonify
+from flask_cors import CORS
 import pandas as pd
 import sqlite3
 import os
 
 app = Flask(__name__)
+CORS(app)
 
 def get_db_connection():
     try:
@@ -50,6 +52,31 @@ def view_data():
     finally:
         if conn:
             conn.close()
+
+@app.route('/api/view-fault-data', methods=['GET'])
+def view_fault_data():
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+            
+        # Query the bosch_equipment table for FA division
+        df = pd.read_sql_query("SELECT * FROM bosch_equipment WHERE div='FA'", conn)
+        return jsonify({"data": df.to_dict('records')}), 200
+        
+    except Exception as e:
+        print(f"Database error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+# Get items(div,calibration_due, calibrator_company,serial number), within DATE and DATE+5, sort by div), accept date as a param
+
+# POST update item with new date
+
+
+
 
 if __name__ == "__main__":
     app.run(debug=True)
