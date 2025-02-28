@@ -6,7 +6,7 @@ import joblib
 app = Flask(__name__)
 
 # Load dataset
-df = pd.read_excel("data/Bosch Dataset.xlsx")
+df = pd.read_excel("Bosch Dataset-2.xlsx")
 
 # Function to generate interactive graph
 def create_visualization():
