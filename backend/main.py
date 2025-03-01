@@ -240,6 +240,29 @@ def handle_date_selection():
         print(f"Error handling request: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/tools-inventory', methods=['GET'])
+def get_tools_inventory():
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+        
+        # First, let's get the column names from the table to make sure we're using the right ones
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(bosch_equipment)")
+        columns = [column[1] for column in cursor.fetchall()]
+        
+        # Build a query that selects all columns
+        query = f"SELECT * FROM bosch_equipment"
+        
+        df = pd.read_sql_query(query, conn)
+        return jsonify({"tools_inventory": df.to_dict('records')}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
 
 if __name__ == "__main__":
     app.run(debug=True)
