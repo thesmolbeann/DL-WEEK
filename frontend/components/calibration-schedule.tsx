@@ -8,7 +8,7 @@ export function CalibrationSchedule() {
 
   // Sample data for the chart
   const chartData = [
-    { label: "JA", value: viewType === "percentage" ? 75 : 35 },
+    { label: "HE", value: viewType === "percentage" ? 75 : 35 },
     { label: "FE", value: viewType === "percentage" ? 90 : 42 },
     { label: "MA", value: viewType === "percentage" ? 80 : 38 },
     { label: "AP", value: viewType === "percentage" ? 65 : 30 },
