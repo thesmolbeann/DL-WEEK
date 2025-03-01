@@ -10,14 +10,7 @@ export function ToolPerformanceDetail() {
 
   return (
     <div className="bg-white rounded-lg shadow-sm p-4">
-      <div className="flex justify-between items-center mb-4">
-        <div>
-          <h2 className="text-lg font-semibold text-[#202020]">Bosch Tools</h2>
-          <div className="text-sm text-[#5f5f5f]">Dashboard</div>
-        </div>
-      </div>
-
-      <h2 className="text-xl font-semibold mb-4">Tool Performance Update</h2>
+      <h2 className="text-2xl font-bold mb-4">Tool Details</h2>
 
       <div className="flex items-center gap-2 mb-4">
         <div className="text-sm font-medium">Status</div>
@@ -100,4 +93,3 @@ export function ToolPerformanceDetail() {
     </div>
   )
 }
-

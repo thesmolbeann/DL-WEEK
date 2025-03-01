@@ -5,6 +5,24 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Moon, Sun, Calendar as CalendarIcon, PanelLeft } from "lucide-react"
 import { useTheme } from "next-themes"
 import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   Sidebar,
   SidebarContent,
@@ -73,7 +91,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <SidebarMenuItem>
                 <Button
                   variant="ghost"
-                  className="w-full justify-start"
+                  className={`w-full justify-start ${activeTab === "calendar" ? "bg-gray-200 dark:bg-gray-700" : ""}`}
                   onClick={() => router.push("/?tab=calendar")}
                   data-active={activeTab === "calendar"}
                 >
@@ -83,7 +101,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <SidebarMenuItem>
                 <Button
                   variant="ghost"
-                  className="w-full justify-start"
+                  className={`w-full justify-start ${activeTab === "schedule" ? "bg-gray-200 dark:bg-gray-700" : ""}`}
                   onClick={() => router.push("/?tab=schedule")}
                   data-active={activeTab === "schedule"}
                 >
@@ -93,36 +111,145 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <SidebarMenuItem>
                 <Button
                   variant="ghost"
-                  className="w-full justify-start"
-                  onClick={() => router.push("/?tab=performance")}
-                  data-active={activeTab === "performance"}
+                  className={`w-full justify-start ${activeTab === "inventory" ? "bg-gray-200 dark:bg-gray-700" : ""}`}
+                  onClick={() => router.push("/?tab=inventory")}
+                  data-active={activeTab === "inventory"}
                 >
-                  Tool Performance
+                  Tool Inventory
                 </Button>
               </SidebarMenuItem>
-              <SidebarMenuItem>
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start"
-                  onClick={() => router.push("/?tab=detail")}
-                  data-active={activeTab === "detail"}
-                >
-                  Tool Details
-                </Button>
-              </SidebarMenuItem>
+              {/* Update Tool button removed */}
             </SidebarMenu>
             
             {/* Upcoming Deadlines Section */}
             <SidebarGroup className="mt-6">
-              <SidebarGroupLabel>Upcoming Deadlines</SidebarGroupLabel>
+              <SidebarGroupLabel className="flex justify-between items-center text-sm font-bold text-red-600 dark:text-red-400">
+                <span>UPCOMING DEADLINES</span>
+                <span className="bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 rounded-full px-2 py-0.5 text-xs font-bold">
+                  {upcomingDeadlines.length}
+                </span>
+              </SidebarGroupLabel>
               <SidebarGroupContent>
                 <div className="space-y-2 text-sm">
                   {upcomingDeadlines.map((deadline) => (
-                    <div key={deadline.id} className="rounded-md bg-sidebar-accent p-2">
-                      <div className="font-medium">{deadline.tool}</div>
-                      <div className="text-xs text-muted-foreground">{deadline.date}</div>
+                    <div key={deadline.id} className="rounded-md bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 p-2">
+                      <div className="font-medium text-red-700 dark:text-red-400">{deadline.tool}</div>
+                      <div className="text-xs text-red-600 dark:text-red-300 font-semibold">{deadline.date}</div>
                     </div>
                   ))}
+                </div>
+              </SidebarGroupContent>
+            </SidebarGroup>
+            
+            {/* Emergency Calibration Section */}
+            <SidebarGroup className="mt-4">
+              <SidebarGroupLabel className="flex justify-between items-center text-sm font-bold text-amber-600 dark:text-amber-400">
+                <span>EMERGENCY CALIBRATION</span>
+                <span className="bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400 rounded-full px-2 py-0.5 text-xs font-bold">
+                  2
+                </span>
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <div className="space-y-2 text-sm">
+                  <div className="rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/30 p-2">
+                    <div className="font-medium text-amber-700 dark:text-amber-400">Digital Caliper CL004-04</div>
+                    <div className="text-xs text-amber-600 dark:text-amber-300 font-semibold">Reported: Jan 2, 2025</div>
+                    <div className="text-xs text-amber-600 dark:text-amber-300">Severity: Major</div>
+                    <div className="text-xs text-amber-600 dark:text-amber-300 mb-2">Calibration Place: Building C, Floor 1</div>
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <button 
+                          className="w-full text-xs bg-amber-100 hover:bg-amber-200 text-amber-800 dark:bg-amber-900/40 dark:hover:bg-amber-900/60 dark:text-amber-300 py-1 rounded-sm"
+                        >
+                          Assign Worker
+                        </button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[425px]">
+                        <DialogHeader>
+                          <DialogTitle>Assign Worker</DialogTitle>
+                          <DialogDescription>
+                            Select a worker to handle the emergency calibration for Digital Caliper CL004-04
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="py-4">
+                          <div className="space-y-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="worker">Select Worker</Label>
+                              <Select>
+                                <SelectTrigger id="worker">
+                                  <SelectValue placeholder="Select worker" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="HE">HE (Helen Evans)</SelectItem>
+                                  <SelectItem value="FE">FE (Frank Edwards)</SelectItem>
+                                  <SelectItem value="MA">MA (Michael Adams)</SelectItem>
+                                  <SelectItem value="AP">AP (Alice Parker)</SelectItem>
+                                  <SelectItem value="MY">MY (Mark Young)</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="notes">Notes (Optional)</Label>
+                              <Textarea id="notes" placeholder="Add any special instructions..." />
+                            </div>
+                          </div>
+                        </div>
+                        <DialogFooter>
+                          <Button type="submit" className="bg-amber-600 hover:bg-amber-700 text-white">Confirm Assignment</Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                  
+                  <div className="rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/30 p-2">
+                    <div className="font-medium text-amber-700 dark:text-amber-400">Torque Wrench TQ-504</div>
+                    <div className="text-xs text-amber-600 dark:text-amber-300 font-semibold">Reported: Jan 1, 2025</div>
+                    <div className="text-xs text-amber-600 dark:text-amber-300">Severity: Medium</div>
+                    <div className="text-xs text-amber-600 dark:text-amber-300 mb-2">Calibration Place: Building A, Floor 2</div>
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <button 
+                          className="w-full text-xs bg-amber-100 hover:bg-amber-200 text-amber-800 dark:bg-amber-900/40 dark:hover:bg-amber-900/60 dark:text-amber-300 py-1 rounded-sm"
+                        >
+                          Assign Worker
+                        </button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[425px]">
+                        <DialogHeader>
+                          <DialogTitle>Assign Worker</DialogTitle>
+                          <DialogDescription>
+                            Select a worker to handle the emergency calibration for Torque Wrench TQ-504
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="py-4">
+                          <div className="space-y-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="worker2">Select Worker</Label>
+                              <Select>
+                                <SelectTrigger id="worker2">
+                                  <SelectValue placeholder="Select worker" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="HE">HE (Helen Evans)</SelectItem>
+                                  <SelectItem value="FE">FE (Frank Edwards)</SelectItem>
+                                  <SelectItem value="MA">MA (Michael Adams)</SelectItem>
+                                  <SelectItem value="AP">AP (Alice Parker)</SelectItem>
+                                  <SelectItem value="MY">MY (Mark Young)</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="notes2">Notes (Optional)</Label>
+                              <Textarea id="notes2" placeholder="Add any special instructions..." />
+                            </div>
+                          </div>
+                        </div>
+                        <DialogFooter>
+                          <Button type="submit" className="bg-amber-600 hover:bg-amber-700 text-white">Confirm Assignment</Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
                 </div>
               </SidebarGroupContent>
             </SidebarGroup>

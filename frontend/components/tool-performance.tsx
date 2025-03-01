@@ -41,16 +41,11 @@ export function ToolPerformance() {
   return (
     <div className="bg-white rounded-lg shadow-sm p-4">
       <div className="flex justify-between items-center mb-4">
-        <div>
-          <h2 className="text-lg font-semibold text-[#202020]">Bosch Tools</h2>
-          <div className="text-sm text-[#5f5f5f]">Dashboard</div>
-        </div>
+        <h2 className="text-2xl font-bold">Tool Performance</h2>
         <div className="flex items-center">
           <div className="h-5 w-5 text-[#ba1717]">⚠️</div>
         </div>
       </div>
-
-      <h2 className="text-xl font-semibold mb-4">Tool Performance Update</h2>
 
       <div className="flex items-center gap-2 mb-4">
         <div className="text-sm font-medium">Status</div>
@@ -75,4 +70,3 @@ export function ToolPerformance() {
     </div>
   )
 }
-

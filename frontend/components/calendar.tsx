@@ -188,11 +188,8 @@ export function Calendar() {
 
   return (
     <div className="bg-white rounded-lg shadow-sm p-4 dark:bg-gray-800 dark:text-white">
-      <div className="flex justify-between items-center mb-4">
-        <div>
-          <h2 className="text-2xl font-bold">Bosch Tools</h2>
-          <div className="text-sm text-muted-foreground">Dashboard</div>
-        </div>
+      <h2 className="text-2xl font-bold mb-4">Calendar View</h2>
+      <div className="flex justify-end items-center mb-4">
         <div className="flex items-center gap-2">
           <Select value={currentDate.getMonth().toString()} onValueChange={handleMonthChange}>
             <SelectTrigger className="w-[180px]">
