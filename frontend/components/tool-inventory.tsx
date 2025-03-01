@@ -91,17 +91,8 @@ export function ToolInventory() {
   const [isMalfunctionDialogOpen, setIsMalfunctionDialogOpen] = useState(false);
   const [isMalfunctionSubmitting, setIsMalfunctionSubmitting] = useState(false);
   const [isMalfunctionSuccess, setIsMalfunctionSuccess] = useState(false);
-  
-  // State for reported malfunctions
-  const [reportedMalfunctions, setReportedMalfunctions] = useState<{
-    id: string;
-    toolId: string;
-    toolName: string;
-    serialNumber: string;
-    severity: string;
-    description: string;
-    reportedAt: string;
-  }[]>([]);
+  const [isEditingMalfunction, setIsEditingMalfunction] = useState(false);
+  const [currentMalfunctionId, setCurrentMalfunctionId] = useState<string | null>(null);
   
   // State for view all malfunctions dialog
   const [isViewAllMalfunctionsOpen, setIsViewAllMalfunctionsOpen] = useState(false);
@@ -261,62 +252,166 @@ export function ToolInventory() {
     setMalfunctionData(prev => ({ ...prev, [field]: value }));
   };
   
-  // Get addMalfunction function from context
-  const { addMalfunction } = useMalfunctions();
+  // Get malfunction context functions
+  const { 
+    addMalfunction, 
+    updateMalfunction, 
+    deleteMalfunction, 
+    getMalfunctionByToolId,
+    malfunctions 
+  } = useMalfunctions();
   
-  // Handle malfunction form submission
-  const handleMalfunctionSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsMalfunctionSubmitting(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      // Add the new malfunction to the state
-      if (selectedToolDetails) {
-        const newMalfunction = {
-          id: String(Date.now()), // Generate a unique ID
-          toolId: String(selectedToolDetails.id),
-          toolName: selectedToolDetails.description || 'Unknown Tool',
-          serialNumber: selectedToolDetails.serial_no || 'N/A',
-          severity: malfunctionData.severity,
-          description: malfunctionData.description,
-          reportedAt: new Date().toLocaleDateString('en-US', {
-            month: '2-digit',
-            day: '2-digit',
-            year: 'numeric'
-          })
-        };
-        
-        // Update the reported malfunctions state with the new malfunction
-        setReportedMalfunctions(prev => {
-          console.log("Adding new malfunction:", newMalfunction);
-          console.log("Previous malfunctions:", prev);
-          const updated = [newMalfunction, ...prev];
-          console.log("Updated malfunctions:", updated);
-          return updated;
+  // Check if the selected tool already has a malfunction report
+  useEffect(() => {
+    if (selectedTool && selectedToolDetails) {
+      const existingMalfunction = getMalfunctionByToolId(selectedTool);
+      
+      if (existingMalfunction) {
+        // If there's an existing report, set up for editing
+        setMalfunctionData({
+          severity: existingMalfunction.severity,
+          description: existingMalfunction.description
         });
-        
-        // Add the malfunction to the context so it can be displayed in the emergency calibration section
-        addMalfunction(newMalfunction);
-      }
-      
-      setIsMalfunctionSubmitting(false);
-      setIsMalfunctionSuccess(true);
-      
-      // Reset success message after 3 seconds
-      setTimeout(() => {
-        setIsMalfunctionSuccess(false);
-        setIsMalfunctionDialogOpen(false);
-        // Reset form
+        setCurrentMalfunctionId(existingMalfunction.id);
+        setIsEditingMalfunction(true);
+      } else {
+        // Reset for a new report
         setMalfunctionData({
           severity: "Medium",
           description: ""
         });
+        setCurrentMalfunctionId(null);
+        setIsEditingMalfunction(false);
+      }
+    }
+  }, [selectedTool, selectedToolDetails, getMalfunctionByToolId]);
+  
+  // Handle malfunction form submission
+  const handleMalfunctionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsMalfunctionSubmitting(true);
+    
+    try {
+      if (selectedToolDetails) {
+        if (isEditingMalfunction && currentMalfunctionId) {
+          // Update existing malfunction report
+          const success = await updateMalfunction(currentMalfunctionId, {
+            severity: malfunctionData.severity,
+            description: malfunctionData.description
+          });
+          
+          if (success) {
+            setIsMalfunctionSuccess(true);
+            
+            // Reset success message after 3 seconds
+            setTimeout(() => {
+              setIsMalfunctionSuccess(false);
+              setIsMalfunctionDialogOpen(false);
+              // Reset form
+              setMalfunctionData({
+                severity: "Medium",
+                description: ""
+              });
+            }, 3000);
+          } else {
+            setError("Failed to update malfunction report");
+            setTimeout(() => setError(null), 5000);
+          }
+        } else {
+          // Create new malfunction report
+          const result = await addMalfunction({
+            toolId: String(selectedToolDetails.id),
+            toolName: selectedToolDetails.description || 'Unknown Tool',
+            serialNumber: selectedToolDetails.serial_no || 'N/A',
+            severity: malfunctionData.severity,
+            description: malfunctionData.description,
+            reportedAt: new Date().toLocaleDateString('en-US', {
+              month: '2-digit',
+              day: '2-digit',
+              year: 'numeric'
+            })
+          });
+          
+          if (result.success) {
+            setIsMalfunctionSuccess(true);
+            
+            // Reset success message after 3 seconds
+            setTimeout(() => {
+              setIsMalfunctionSuccess(false);
+              setIsMalfunctionDialogOpen(false);
+              // Reset form
+              setMalfunctionData({
+                severity: "Medium",
+                description: ""
+              });
+            }, 3000);
+          } else if (result.message && result.message.includes("already exists")) {
+            // If a report already exists, set up for editing
+            setError("A report already exists for this tool. You can edit the existing report.");
+            
+            if (result.reportId) {
+              const existingMalfunction = malfunctions.find(m => m.id === result.reportId);
+              if (existingMalfunction) {
+                setMalfunctionData({
+                  severity: existingMalfunction.severity,
+                  description: existingMalfunction.description
+                });
+                setCurrentMalfunctionId(existingMalfunction.id);
+                setIsEditingMalfunction(true);
+              }
+            }
+            
+            setTimeout(() => setError(null), 5000);
+          } else {
+            setError(result.message || "Failed to create malfunction report");
+            setTimeout(() => setError(null), 5000);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error handling malfunction report:", error);
+      setError(error instanceof Error ? error.message : "An unknown error occurred");
+      setTimeout(() => setError(null), 5000);
+    } finally {
+      setIsMalfunctionSubmitting(false);
+    }
+  };
+  
+  // Handle malfunction deletion
+  const handleDeleteMalfunction = async () => {
+    if (currentMalfunctionId) {
+      setIsMalfunctionSubmitting(true);
+      
+      try {
+        const success = await deleteMalfunction(currentMalfunctionId);
         
-        // Return to the main inventory view to see the updated emergency calibration section
-        setSelectedTool(null);
-      }, 3000);
-    }, 1500);
+        if (success) {
+          setIsMalfunctionSuccess(true);
+          setCurrentMalfunctionId(null);
+          setIsEditingMalfunction(false);
+          
+          // Reset success message after 3 seconds
+          setTimeout(() => {
+            setIsMalfunctionSuccess(false);
+            setIsMalfunctionDialogOpen(false);
+            // Reset form
+            setMalfunctionData({
+              severity: "Medium",
+              description: ""
+            });
+          }, 3000);
+        } else {
+          setError("Failed to delete malfunction report");
+          setTimeout(() => setError(null), 5000);
+        }
+      } catch (error) {
+        console.error("Error deleting malfunction report:", error);
+        setError(error instanceof Error ? error.message : "An unknown error occurred");
+        setTimeout(() => setError(null), 5000);
+      } finally {
+        setIsMalfunctionSubmitting(false);
+      }
+    }
   };
 
   if (loading) return (
@@ -657,7 +752,9 @@ export function ToolInventory() {
                     {isMalfunctionSuccess ? (
                       <Alert className="bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800">
                         <AlertDescription className="text-green-800 dark:text-green-400">
-                          Malfunction report submitted successfully!
+                          {isEditingMalfunction 
+                            ? "Malfunction report updated successfully!" 
+                            : "Malfunction report submitted successfully!"}
                         </AlertDescription>
                       </Alert>
                     ) : (
@@ -693,20 +790,37 @@ export function ToolInventory() {
                           />
                         </div>
                         
-                        <DialogFooter>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => setIsMalfunctionDialogOpen(false)}
-                          >
-                            Cancel
-                          </Button>
+                        <DialogFooter className="flex items-center justify-between">
+                          <div className="flex gap-2">
+                            {isEditingMalfunction && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
+                                onClick={handleDeleteMalfunction}
+                                disabled={isMalfunctionSubmitting}
+                              >
+                                Delete Report
+                              </Button>
+                            )}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => setIsMalfunctionDialogOpen(false)}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
                           <Button
                             type="submit"
                             className="bg-red-600 hover:bg-red-700 text-white"
                             disabled={isMalfunctionSubmitting}
                           >
-                            {isMalfunctionSubmitting ? "Submitting..." : "Submit Report"}
+                            {isMalfunctionSubmitting 
+                              ? "Submitting..." 
+                              : isEditingMalfunction 
+                                ? "Update Report" 
+                                : "Submit Report"}
                           </Button>
                         </DialogFooter>
                       </form>

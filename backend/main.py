@@ -5,6 +5,7 @@ import sqlite3
 import os
 import datetime
 import json
+import uuid
 import random
 import numpy as np
 
@@ -402,6 +403,199 @@ def update_tool():
         if conn:
             conn.close()
 
+# Create a table for malfunction reports if it doesn't exist
+def create_malfunction_reports_table():
+    conn = get_db_connection()
+    if not conn:
+        print("Failed to connect to database when creating malfunction_reports table")
+        return False
+    
+    try:
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS malfunction_reports (
+                id TEXT PRIMARY KEY,
+                tool_id TEXT NOT NULL,
+                tool_name TEXT NOT NULL,
+                serial_number TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                description TEXT NOT NULL,
+                reported_at TEXT NOT NULL,
+                UNIQUE(tool_id)
+            )
+        ''')
+        conn.commit()
+        print("Malfunction reports table created or already exists")
+        return True
+    except Exception as e:
+        print(f"Error creating malfunction_reports table: {e}")
+        return False
+    finally:
+        conn.close()
+
+@app.route('/api/malfunction-reports', methods=['GET'])
+def get_malfunction_reports():
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+        
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM malfunction_reports")
+        
+        # Convert the result to a list of dictionaries
+        columns = [column[0] for column in cursor.description]
+        reports = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        
+        return jsonify({"malfunction_reports": reports}), 200
+    except Exception as e:
+        print(f"Error getting malfunction reports: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/malfunction-reports', methods=['POST'])
+def create_malfunction_report():
+    try:
+        # Get the report data from the request
+        report_data = request.json
+        print("Received malfunction report data:", report_data)
+        
+        if not report_data or 'toolId' not in report_data or 'description' not in report_data:
+            return jsonify({"error": "Invalid report data or missing required fields"}), 400
+        
+        # Connect to the database
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+        
+        # Check if a report already exists for this tool
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id FROM malfunction_reports WHERE tool_id = ?",
+            (report_data['toolId'],)
+        )
+        existing_report = cursor.fetchone()
+        
+        if existing_report:
+            return jsonify({
+                "status": "exists",
+                "message": "A report already exists for this tool",
+                "report_id": existing_report[0]
+            }), 200
+        
+        # Generate a unique ID for the report
+        report_id = str(uuid.uuid4())
+        
+        # Insert the new report
+        cursor.execute(
+            """
+            INSERT INTO malfunction_reports 
+            (id, tool_id, tool_name, serial_number, severity, description, reported_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                report_id,
+                report_data['toolId'],
+                report_data['toolName'],
+                report_data['serialNumber'],
+                report_data['severity'],
+                report_data['description'],
+                report_data['reportedAt']
+            )
+        )
+        conn.commit()
+        
+        return jsonify({
+            "status": "success",
+            "message": "Malfunction report created successfully",
+            "report_id": report_id
+        }), 201
+    except Exception as e:
+        print(f"Error creating malfunction report: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/malfunction-reports/<report_id>', methods=['PUT'])
+def update_malfunction_report(report_id):
+    try:
+        # Get the report data from the request
+        report_data = request.json
+        print(f"Updating malfunction report {report_id} with data:", report_data)
+        
+        if not report_data or 'description' not in report_data:
+            return jsonify({"error": "Invalid report data or missing description"}), 400
+        
+        # Connect to the database
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+        
+        # Update the report
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE malfunction_reports 
+            SET severity = ?, description = ?
+            WHERE id = ?
+            """,
+            (
+                report_data['severity'],
+                report_data['description'],
+                report_id
+            )
+        )
+        conn.commit()
+        
+        # Check if any rows were affected
+        if cursor.rowcount == 0:
+            return jsonify({"error": f"No report found with ID {report_id}"}), 404
+        
+        return jsonify({
+            "status": "success",
+            "message": "Malfunction report updated successfully",
+            "report_id": report_id
+        }), 200
+    except Exception as e:
+        print(f"Error updating malfunction report: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/malfunction-reports/<report_id>', methods=['DELETE'])
+def delete_malfunction_report(report_id):
+    try:
+        # Connect to the database
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+        
+        # Delete the report
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM malfunction_reports WHERE id = ?",
+            (report_id,)
+        )
+        conn.commit()
+        
+        # Check if any rows were affected
+        if cursor.rowcount == 0:
+            return jsonify({"error": f"No report found with ID {report_id}"}), 404
+        
+        return jsonify({
+            "status": "success",
+            "message": "Malfunction report deleted successfully"
+        }), 200
+    except Exception as e:
+        print(f"Error deleting malfunction report: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
 # get the count only for 1st graph
 @app.route('/api/worker-allocation', methods=['GET'])
 def get_worker_allocation():
@@ -739,6 +933,9 @@ def apply_heuristic_model(workers, calibration_items):
     return final_workloads
 
 if __name__ == "__main__":
+    # Create the malfunction reports table if it doesn't exist
+    create_malfunction_reports_table()
+    
     # Print database schema information
     try:
         conn = get_db_connection()
@@ -759,6 +956,13 @@ if __name__ == "__main__":
                     column_name = column[1]
                     value = sample_row[i] if i < len(sample_row) else None
                     print(f"{column_name}: {value}")
+            
+            # Print malfunction_reports schema
+            cursor.execute("PRAGMA table_info(malfunction_reports)")
+            columns = cursor.fetchall()
+            print("\n=== Database Schema for malfunction_reports ===")
+            for column in columns:
+                print(f"Column: {column}")
             
             conn.close()
     except Exception as e:

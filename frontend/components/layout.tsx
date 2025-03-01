@@ -62,6 +62,38 @@ function SidebarReopenButton() {
   )
 }
 
+// Delete button for malfunction reports
+function DeleteMalfunctionButton({ malfunctionId }: { malfunctionId: string }) {
+  const { deleteMalfunction } = useMalfunctions()
+  const [isDeleting, setIsDeleting] = useState(false)
+  
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation() // Prevent event bubbling
+    
+    if (confirm("Are you sure you want to delete this malfunction report?")) {
+      setIsDeleting(true)
+      try {
+        await deleteMalfunction(malfunctionId)
+      } catch (error) {
+        console.error("Error deleting malfunction:", error)
+        alert("Failed to delete malfunction report")
+      } finally {
+        setIsDeleting(false)
+      }
+    }
+  }
+  
+  return (
+    <button
+      onClick={handleDelete}
+      disabled={isDeleting}
+      className="text-xs text-amber-700 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-300 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/30 dark:hover:bg-amber-900/50 rounded px-1.5 py-0.5"
+    >
+      {isDeleting ? "..." : "Delete"}
+    </button>
+  )
+}
+
 // Define types for emergency calibration items
 interface EmergencyCalibrationItem {
   id: string;
@@ -310,7 +342,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
                         .slice(0, 3)
                         .map(item => (
                           <div key={item.id} className="rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/30 p-2">
-                            <div className="font-medium text-amber-700 dark:text-amber-400">{item.toolName}</div>
+                            <div className="flex justify-between items-start">
+                              <div className="font-medium text-amber-700 dark:text-amber-400">{item.toolName}</div>
+                              <DeleteMalfunctionButton malfunctionId={item.id} />
+                            </div>
                             <div className="text-xs text-amber-600 dark:text-amber-300 font-semibold">
                               Reported: {item.reportedAt}
                             </div>
@@ -347,7 +382,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
                               .filter(item => item.severity === "Mild" || item.severity === "Medium" || item.severity === "Major")
                               .map(item => (
                                 <div key={item.id} className="rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/30 p-2">
-                                  <div className="font-medium text-amber-700 dark:text-amber-400">{item.toolName}</div>
+                                  <div className="flex justify-between items-start">
+                                    <div className="font-medium text-amber-700 dark:text-amber-400">{item.toolName}</div>
+                                    <DeleteMalfunctionButton malfunctionId={item.id} />
+                                  </div>
                                   <div className="text-xs text-amber-600 dark:text-amber-300 font-semibold">
                                     Reported: {item.reportedAt}
                                   </div>
