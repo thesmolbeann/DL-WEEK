@@ -1,42 +1,67 @@
-## Run the Backend first
+# Team Deepear
+## Track 5 : Bosch
 
-Install Dependencies:
+---
+## 1. Introduction
+
+Our product aims to be a tool that removes the need for manual checking of physical worksheets for more efficient and fair scheduling and greater attention to faults.
+
+Links :
+[Video](),
+[Slides](https://www.canva.com/design/DAGgd9fjX88/uAmrt2n33eY3mRklJ8uRwA/edit)
+
+Our product is pretty cool man 
+### 6 thumbs up!!!
+
+<img src="./group_photo.jpg">
+
+---
+
+## 2. Setting Up
+
+### 2a. Run the Backend first
+
+1. Create the virtual envirnoment:
 ```bash
 cd backend
 python -m venv venv
+```
+
+2. Activate the environment:
+```bash
 source venv/bin/activate  # For Mac/Linux
 venv\Scripts\activate     # For Windows
+```
+
+3. Install dependencies:
+```bash
 pip install -r requirements.txt
 ```
 
-Startup Backend
+4. Startup Backend
 ```bash
-python main.py
-``` 
+python main.py # Or python3 main.py
+```
+>Backend server will start on ```127.0.0.1:5000```
 
-Call endpoiint to create db
+5. Create the database (skip if bosch.db already exists)
 ```bash
-curl -X POST http://localhost:5000/api/create-and-load
+curl -X POST http://127.0.0.1:5000/api/create-and-load
 ```
 You should see a bosch.db file in the **/backend** folder.
-If it doesnt work, replace localhost with 127.0.0.1
 
-See the table
+---
+### 2b. Run the Frontend
+Open a new terminal, from the **root** directory,
+1. Install dependencies:
 ```bash
-curl http://localhost:5000/api/view-data
-```
-
-## Run the frontend
-Install dependencies
-```bash
-cd frontend
+cd backend
 npm install --legacy-peer-deps
 ```
 
-Spin up the frontend
+2. Spin up the frontend
 ```bash
 npm run dev
 ```
-
-Access frontend at http://localhost:3000
+>Frontend will start at ```localhost:3000```
 
