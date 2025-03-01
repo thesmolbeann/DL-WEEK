@@ -631,9 +631,12 @@ def get_worker_allocation():
 @app.route('/api/optimize-worker-allocation', methods=['GET'])      # graph
 def optimize_worker_allocation():
     try:
+        print(f"[LOG] {datetime.datetime.now().isoformat()} - Optimize worker allocation endpoint called")
+        
         # Get worker allocation data directly from the database
         conn = get_db_connection()
         if not conn:
+            print(f"[LOG] {datetime.datetime.now().isoformat()} - Database connection failed")
             return jsonify({"error": "Database connection failed"}), 500
 
         # Fetch relevant data
@@ -663,31 +666,36 @@ def optimize_worker_allocation():
                 item.get("calibration__due", ""), 
                 item.get("old_workload", 0)
             ))
+        
+        print(f"[LOG] {datetime.datetime.now().isoformat()} - Processing {len(workers)} workers and {len(calibration_items)} calibration items")
 
         # Apply heuristic model
         optimized_allocation = apply_heuristic_model(workers, calibration_items)
-
-        # Print for debugging
-        print("Workers:", workers)
-        print("Optimized allocation:", optimized_allocation)
+        
+        print(f"[LOG] {datetime.datetime.now().isoformat()} - Optimization complete. Generated {len(optimized_allocation)} worker assignments")
 
         # Prepare the optimized data to match serial_no and pic
         result = optimized_allocation
         return jsonify({"optimized_worker_allocation": result}), 200
 
     except Exception as e:
-        print(f"Error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        error_message = str(e)
+        print(f"[LOG] {datetime.datetime.now().isoformat()} - Error in optimize worker allocation: {error_message}")
+        return jsonify({"error": error_message}), 500
     finally:
         if conn:
             conn.close()
+        print(f"[LOG] {datetime.datetime.now().isoformat()} - Optimize worker allocation endpoint completed")
 
 @app.route('/api/update-worker-allocation', methods=['POST'])       # run model and update db
 def update_worker_allocation():
     try:
+        print(f"[LOG] {datetime.datetime.now().isoformat()} - Update worker allocation endpoint called")
+        
         # Get optimized allocation data directly from the database
         conn = get_db_connection()
         if not conn:
+            print(f"[LOG] {datetime.datetime.now().isoformat()} - Database connection failed")
             return jsonify({"error": "Database connection failed"}), 500
 
         # Fetch relevant data
@@ -717,30 +725,98 @@ def update_worker_allocation():
                 item.get("calibration__due", ""), 
                 item.get("old_workload", 0)
             ))
+        
+        print(f"[LOG] {datetime.datetime.now().isoformat()} - Processing {len(workers)} workers and {len(calibration_items)} calibration items")
 
-        # Apply heuristic model
-        optimized_data = apply_heuristic_model(workers, calibration_items)
-        if not optimized_data:
+        # Apply heuristic model to get worker load distribution
+        optimized_worker_loads = apply_heuristic_model(workers, calibration_items)
+        if not optimized_worker_loads:
+            print(f"[LOG] {datetime.datetime.now().isoformat()} - No optimized data available")
             return jsonify({"error": "No optimized data available"}), 500
-
+        
+        print(f"[LOG] {datetime.datetime.now().isoformat()} - Optimization complete. Generated worker load distribution")
+        
+        # Create a mapping of serial numbers to workers based on the optimized distribution
+        # This is needed because apply_heuristic_model returns (worker_id, workload_count) tuples
+        # but we need to map each serial_no to a worker for the database update
+        
+        print(f"[LOG] {datetime.datetime.now().isoformat()} - Creating worker assignments based on optimized distribution")
+        
+        # Convert optimized_worker_loads to a dictionary for easier access
+        target_workloads = {worker_id: load for worker_id, load in optimized_worker_loads}
+        
+        # Track current assignments to ensure we don't exceed target workloads
+        current_workloads = {worker_id: 0 for worker_id in workers}
+        
+        # Create assignments mapping serial numbers to workers
+        worker_assignments = []  # List of (worker_id, serial_no) tuples
+        
+        # First, group calibration items by calibrator and due date for better assignment
+        grouped_items = {}
+        for item in calibration_items:
+            calibrator, serial_no, due_date, _ = item
+            key = (calibrator, due_date)
+            if key not in grouped_items:
+                grouped_items[key] = []
+            grouped_items[key].append(serial_no)
+        
+        # Assign items to workers based on target workloads
+        for (calibrator, due_date), serial_numbers in grouped_items.items():
+            # Find workers who still need more items to reach their target
+            available_workers = [w for w in workers if current_workloads[w] < target_workloads.get(w, 0)]
+            
+            if not available_workers:
+                # If all workers have reached their targets, distribute remaining items evenly
+                available_workers = workers
+            
+            # Sort workers by how far they are from their target (ascending)
+            available_workers.sort(key=lambda w: target_workloads.get(w, 0) - current_workloads[w], reverse=True)
+            
+            # Assign serial numbers to workers
+            for serial_no in serial_numbers:
+                # Get the worker who needs the most items to reach target
+                best_worker = available_workers[0]
+                
+                # Add assignment
+                worker_assignments.append((best_worker, serial_no))
+                
+                # Update current workload
+                current_workloads[best_worker] += 1
+                
+                # Re-sort workers if there are more items to assign
+                if len(serial_numbers) > 1:
+                    available_workers.sort(key=lambda w: target_workloads.get(w, 0) - current_workloads[w], reverse=True)
+        
+        print(f"[LOG] {datetime.datetime.now().isoformat()} - Created {len(worker_assignments)} worker assignments")
+        
+        # Now update the database with the new assignments
         cursor = conn.cursor()
-
-        # Updating each serial_no with the corresponding optimized pic
         update_query = "UPDATE bosch_equipment SET pic = ? WHERE serial_no = ?"
         
-        for worker_id, optimized_load in optimized_data:
-            cursor.execute(update_query, (worker_id, optimized_load))
+        update_count = 0
+        for worker_id, serial_no in worker_assignments:
+            cursor.execute(update_query, (worker_id, serial_no))
+            update_count += 1
 
         conn.commit()
+        
+        print(f"[LOG] {datetime.datetime.now().isoformat()} - Database updated successfully. {update_count} records modified")
 
-        return jsonify({"message": "Worker allocation updated successfully"}), 200
+        return jsonify({
+            "message": "Worker allocation updated successfully",
+            "workers_processed": len(workers),
+            "items_processed": len(calibration_items),
+            "updates_applied": update_count
+        }), 200
 
     except Exception as e:
-        print(f"Error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        error_message = str(e)
+        print(f"[LOG] {datetime.datetime.now().isoformat()} - Error in update worker allocation: {error_message}")
+        return jsonify({"error": error_message}), 500
     finally:
         if conn:
             conn.close()
+        print(f"[LOG] {datetime.datetime.now().isoformat()} - Update worker allocation endpoint completed")
 
 def apply_heuristic_model(workers, calibration_items):
     """
@@ -969,4 +1045,3 @@ if __name__ == "__main__":
         print(f"Error getting schema information: {e}")
     
     app.run(debug=True)
-
