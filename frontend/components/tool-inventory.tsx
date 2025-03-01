@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { useMalfunctions } from "@/contexts/MalfunctionContext"
 import { 
   Select,
   SelectContent,
@@ -82,7 +83,7 @@ export function ToolInventory() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   
-  // State for malfunction report
+// State for malfunction report
   const [malfunctionData, setMalfunctionData] = useState({
     severity: "Medium",
     description: ""
@@ -90,6 +91,20 @@ export function ToolInventory() {
   const [isMalfunctionDialogOpen, setIsMalfunctionDialogOpen] = useState(false);
   const [isMalfunctionSubmitting, setIsMalfunctionSubmitting] = useState(false);
   const [isMalfunctionSuccess, setIsMalfunctionSuccess] = useState(false);
+  
+  // State for reported malfunctions
+  const [reportedMalfunctions, setReportedMalfunctions] = useState<{
+    id: string;
+    toolId: string;
+    toolName: string;
+    serialNumber: string;
+    severity: string;
+    description: string;
+    reportedAt: string;
+  }[]>([]);
+  
+  // State for view all malfunctions dialog
+  const [isViewAllMalfunctionsOpen, setIsViewAllMalfunctionsOpen] = useState(false);
 
   // Fetch tools from backend when component mounts
   useEffect(() => {
@@ -197,6 +212,9 @@ export function ToolInventory() {
     setMalfunctionData(prev => ({ ...prev, [field]: value }));
   };
   
+  // Get addMalfunction function from context
+  const { addMalfunction } = useMalfunctions();
+  
   // Handle malfunction form submission
   const handleMalfunctionSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -204,6 +222,35 @@ export function ToolInventory() {
     
     // Simulate API call
     setTimeout(() => {
+      // Add the new malfunction to the state
+      if (selectedToolDetails) {
+        const newMalfunction = {
+          id: String(Date.now()), // Generate a unique ID
+          toolId: String(selectedToolDetails.id),
+          toolName: selectedToolDetails.description || 'Unknown Tool',
+          serialNumber: selectedToolDetails.serial_no || 'N/A',
+          severity: malfunctionData.severity,
+          description: malfunctionData.description,
+          reportedAt: new Date().toLocaleDateString('en-US', {
+            month: '2-digit',
+            day: '2-digit',
+            year: 'numeric'
+          })
+        };
+        
+        // Update the reported malfunctions state with the new malfunction
+        setReportedMalfunctions(prev => {
+          console.log("Adding new malfunction:", newMalfunction);
+          console.log("Previous malfunctions:", prev);
+          const updated = [newMalfunction, ...prev];
+          console.log("Updated malfunctions:", updated);
+          return updated;
+        });
+        
+        // Add the malfunction to the context so it can be displayed in the emergency calibration section
+        addMalfunction(newMalfunction);
+      }
+      
       setIsMalfunctionSubmitting(false);
       setIsMalfunctionSuccess(true);
       
@@ -216,6 +263,9 @@ export function ToolInventory() {
           severity: "Medium",
           description: ""
         });
+        
+        // Return to the main inventory view to see the updated emergency calibration section
+        setSelectedTool(null);
       }, 3000);
     }, 1500);
   };
@@ -739,14 +789,7 @@ export function ToolInventory() {
           <div className="mt-4 text-sm text-gray-500 dark:text-gray-400">
             Showing {filteredTools.length} of {tools.length} tools
           </div>
-          
-          {/* Debug section - remove in production */}
-          {/* <div className="mt-8 p-4 bg-gray-100 dark:bg-gray-700 rounded-md">
-            <h3 className="text-lg font-semibold mb-2">Debug: First Tool Data Structure</h3>
-            <pre className="text-xs overflow-auto">
-              {tools.length > 0 ? JSON.stringify(tools[0], null, 2) : 'No tools data'}
-            </pre>
-          </div> */}
+
         </div>
       )}
     </div>

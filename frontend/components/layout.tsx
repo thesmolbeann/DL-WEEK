@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Moon, Sun, Calendar as CalendarIcon, PanelLeft } from "lucide-react"
 import { useTheme } from "next-themes"
+import { useMalfunctions } from "@/contexts/MalfunctionContext"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -61,6 +62,17 @@ function SidebarReopenButton() {
   )
 }
 
+// Define types for emergency calibration items
+interface EmergencyCalibrationItem {
+  id: string;
+  toolId: string;
+  toolName: string;
+  serialNumber: string;
+  severity: string;
+  description: string;
+  reportedAt: string;
+}
+
 export function Layout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -77,6 +89,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
     serial?: string;
     company?: string;
   }
+  
+  // Get malfunctions from context
+  const { malfunctions } = useMalfunctions();
+  const [isViewAllEmergenciesOpen, setIsViewAllEmergenciesOpen] = useState(false);
   
   // Generate upcoming deadlines based on current date
   const [upcomingDeadlines, setUpcomingDeadlines] = useState<DeadlineItem[]>([]);
@@ -281,122 +297,73 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <SidebarGroupLabel className="flex justify-between items-center text-sm font-bold text-amber-600 dark:text-amber-400">
                 <span>EMERGENCY CALIBRATION</span>
                 <span className="bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400 rounded-full px-2 py-0.5 text-xs font-bold">
-                  2
+                  {malfunctions.filter(item => item.severity === "Mild" || item.severity === "Medium" || item.severity === "Major").length}
                 </span>
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <div className="space-y-2 text-sm">
-                  <div className="rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/30 p-2">
-                    <div className="font-medium text-amber-700 dark:text-amber-400">Digital Caliper CL004-04</div>
-                    <div className="text-xs text-amber-600 dark:text-amber-300 font-semibold">
-                      Reported: {new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric'
-                      })}
-                    </div>
-                    <div className="text-xs text-amber-600 dark:text-amber-300">Severity: Major</div>
-                    <div className="text-xs text-amber-600 dark:text-amber-300 mb-2">Calibration Place: Building C, Floor 1</div>
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <button 
-                          className="w-full text-xs bg-amber-100 hover:bg-amber-200 text-amber-800 dark:bg-amber-900/40 dark:hover:bg-amber-900/60 dark:text-amber-300 py-1 rounded-sm"
-                        >
-                          Assign Worker
-                        </button>
-                      </DialogTrigger>
-                      <DialogContent className="sm:max-w-[425px]">
-                        <DialogHeader>
-                          <DialogTitle>Assign Worker</DialogTitle>
-                          <DialogDescription>
-                            Select a worker to handle the emergency calibration for Digital Caliper CL004-04
-                          </DialogDescription>
-                        </DialogHeader>
-                        <div className="py-4">
-                          <div className="space-y-4">
-                            <div className="space-y-2">
-                              <Label htmlFor="worker">Select Worker</Label>
-                              <Select>
-                                <SelectTrigger id="worker">
-                                  <SelectValue placeholder="Select worker" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="HE">HE (Helen Evans)</SelectItem>
-                                  <SelectItem value="FE">FE (Frank Edwards)</SelectItem>
-                                  <SelectItem value="MA">MA (Michael Adams)</SelectItem>
-                                  <SelectItem value="AP">AP (Alice Parker)</SelectItem>
-                                  <SelectItem value="MY">MY (Mark Young)</SelectItem>
-                                </SelectContent>
-                              </Select>
+                  {malfunctions.filter(item => item.severity === "Mild" || item.severity === "Medium" || item.severity === "Major").length > 0 ? (
+                    <>
+                      {malfunctions
+                        .filter(item => item.severity === "Mild" || item.severity === "Medium" || item.severity === "Major")
+                        .slice(0, 3)
+                        .map(item => (
+                          <div key={item.id} className="rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/30 p-2">
+                            <div className="font-medium text-amber-700 dark:text-amber-400">{item.toolName}</div>
+                            <div className="text-xs text-amber-600 dark:text-amber-300 font-semibold">
+                              Reported: {item.reportedAt}
                             </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="notes">Notes (Optional)</Label>
-                              <Textarea id="notes" placeholder="Add any special instructions..." />
-                            </div>
+                            <div className="text-xs text-amber-600 dark:text-amber-300">S/N: {item.serialNumber}</div>
+                            <div className="text-xs text-amber-600 dark:text-amber-300">Severity: {item.severity}</div>
                           </div>
-                        </div>
-                        <DialogFooter>
-                          <Button type="submit" className="bg-amber-600 hover:bg-amber-700 text-white">Confirm Assignment</Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
-                  </div>
+                        ))
+                      }
+                    </>
+                  ) : (
+                    <div className="p-2 text-center text-amber-600 dark:text-amber-400">
+                      No emergency calibrations required
+                    </div>
+                  )}
                   
-                  <div className="rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/30 p-2">
-                    <div className="font-medium text-amber-700 dark:text-amber-400">Torque Wrench TQ-504</div>
-                    <div className="text-xs text-amber-600 dark:text-amber-300 font-semibold">
-                      Reported: {new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric'
-                      })}
-                    </div>
-                    <div className="text-xs text-amber-600 dark:text-amber-300">Severity: Medium</div>
-                    <div className="text-xs text-amber-600 dark:text-amber-300 mb-2">Calibration Place: Building A, Floor 2</div>
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <button 
-                          className="w-full text-xs bg-amber-100 hover:bg-amber-200 text-amber-800 dark:bg-amber-900/40 dark:hover:bg-amber-900/60 dark:text-amber-300 py-1 rounded-sm"
-                        >
-                          Assign Worker
-                        </button>
-                      </DialogTrigger>
-                      <DialogContent className="sm:max-w-[425px]">
-                        <DialogHeader>
-                          <DialogTitle>Assign Worker</DialogTitle>
-                          <DialogDescription>
-                            Select a worker to handle the emergency calibration for Torque Wrench TQ-504
-                          </DialogDescription>
-                        </DialogHeader>
-                        <div className="py-4">
-                          <div className="space-y-4">
-                            <div className="space-y-2">
-                              <Label htmlFor="worker2">Select Worker</Label>
-                              <Select>
-                                <SelectTrigger id="worker2">
-                                  <SelectValue placeholder="Select worker" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="HE">HE (Helen Evans)</SelectItem>
-                                  <SelectItem value="FE">FE (Frank Edwards)</SelectItem>
-                                  <SelectItem value="MA">MA (Michael Adams)</SelectItem>
-                                  <SelectItem value="AP">AP (Alice Parker)</SelectItem>
-                                  <SelectItem value="MY">MY (Mark Young)</SelectItem>
-                                </SelectContent>
-                              </Select>
+                  {/* View More button for emergency calibrations */}
+                  <Dialog open={isViewAllEmergenciesOpen} onOpenChange={setIsViewAllEmergenciesOpen}>
+                    <DialogTrigger asChild>
+                      <button className="w-full mt-2 text-xs flex items-center justify-center bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:hover:bg-amber-900/30 dark:text-amber-400 py-1 rounded-sm">
+                        View More <span className="ml-1">↓</span>
+                      </button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[425px]">
+                      <DialogHeader>
+                        <DialogTitle>All Emergency Calibrations</DialogTitle>
+                        <DialogDescription>
+                          All tools requiring emergency calibration due to reported malfunctions
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="py-4 max-h-[60vh] overflow-y-auto">
+                        <div className="space-y-2">
+                          {malfunctions.filter(item => item.severity === "Mild" || item.severity === "Medium" || item.severity === "Major").length > 0 ? (
+                            malfunctions
+                              .filter(item => item.severity === "Mild" || item.severity === "Medium" || item.severity === "Major")
+                              .map(item => (
+                                <div key={item.id} className="rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/30 p-2">
+                                  <div className="font-medium text-amber-700 dark:text-amber-400">{item.toolName}</div>
+                                  <div className="text-xs text-amber-600 dark:text-amber-300 font-semibold">
+                                    Reported: {item.reportedAt}
+                                  </div>
+                                  <div className="text-xs text-amber-600 dark:text-amber-300">S/N: {item.serialNumber}</div>
+                                  <div className="text-xs text-amber-600 dark:text-amber-300">Severity: {item.severity}</div>
+                                  <div className="text-xs text-amber-600 dark:text-amber-300 mt-1">{item.description}</div>
+                                </div>
+                              ))
+                          ) : (
+                            <div className="p-2 text-center text-amber-600 dark:text-amber-400">
+                              No emergency calibrations required
                             </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="notes2">Notes (Optional)</Label>
-                              <Textarea id="notes2" placeholder="Add any special instructions..." />
-                            </div>
-                          </div>
+                          )}
                         </div>
-                        <DialogFooter>
-                          <Button type="submit" className="bg-amber-600 hover:bg-amber-700 text-white">Confirm Assignment</Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
-                  </div>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
                 </div>
               </SidebarGroupContent>
             </SidebarGroup>

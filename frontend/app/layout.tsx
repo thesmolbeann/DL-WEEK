@@ -1,6 +1,7 @@
 import type React from "react"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Layout } from "@/components/layout"
+import { MalfunctionProvider } from "@/contexts/MalfunctionContext"
 import './globals.css'
 
 export const metadata = {
@@ -13,7 +14,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head />
       <body>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          <Layout>{children}</Layout>
+          <MalfunctionProvider>
+            <Layout>{children}</Layout>
+          </MalfunctionProvider>
         </ThemeProvider>
       </body>
     </html>
