@@ -4,6 +4,7 @@ import pandas as pd
 import sqlite3
 import os
 import datetime
+import json
 
 app = Flask(__name__)
 CORS(app)
@@ -258,7 +259,16 @@ def get_tools_inventory():
         query = f"SELECT * FROM bosch_equipment"
         
         df = pd.read_sql_query(query, conn)
-        return jsonify({"tools_inventory": df.to_dict('records')}), 200
+        
+        # Convert the DataFrame to a list of dictionaries
+        tools_inventory = df.to_dict('records')
+        
+        # Map 'index' to 'id' for frontend compatibility
+        for tool in tools_inventory:
+            if 'index' in tool:
+                tool['id'] = tool['index']
+        
+        return jsonify({"tools_inventory": tools_inventory}), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -266,5 +276,155 @@ def get_tools_inventory():
         if conn:
             conn.close()
 
+def convert_date_format(date_str):
+    """
+    Convert various date formats to the format used in the database (DD-MMM-YY)
+    Examples:
+    - 06/06/2025 -> 06-Jun-25
+    - 06-June-2025 -> 06-Jun-25
+    - 06-Jun-2025 -> 06-Jun-25
+    - 2025-06-06 -> 06-Jun-25
+    """
+    if not date_str:
+        return date_str
+    
+    try:
+        # Try different date formats
+        date_obj = None
+        formats_to_try = [
+            '%d/%m/%Y',  # 06/06/2025
+            '%d-%B-%Y',  # 06-June-2025
+            '%d-%b-%Y',  # 06-Jun-2025
+            '%Y-%m-%d',  # 2025-06-06
+            '%m/%d/%Y',  # 06/06/2025 (US format)
+            '%d-%m-%Y',  # 06-06-2025
+            '%d %B %Y',  # 06 June 2025
+            '%d %b %Y',  # 06 Jun 2025
+        ]
+        
+        for date_format in formats_to_try:
+            try:
+                date_obj = datetime.datetime.strptime(date_str, date_format)
+                break
+            except ValueError:
+                continue
+        
+        if date_obj:
+            # Convert to the format used in the database (DD-MMM-YY)
+            return date_obj.strftime('%d-%b-%y')
+        else:
+            # If all formats fail, return the original string
+            return date_str
+    except Exception as e:
+        print(f"Error converting date format: {e}")
+        return date_str
+
+@app.route('/api/update-tool', methods=['POST'])
+def update_tool():
+    conn = None
+    try:
+        # Get the tool data from the request
+        tool_data = request.json
+        print("Received tool data:", tool_data)
+        
+        if not tool_data or 'id' not in tool_data:
+            return jsonify({"error": "Invalid tool data or missing ID"}), 400
+        
+        # Connect to the database
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+        
+        # Map frontend field names to database column names
+        field_mapping = {
+            'name': 'description',
+            'serialNumber': 'serial_no',
+            'brand': 'brand',
+            'division': 'div',
+            'calibrator': 'calibrator',
+            'range': 'range',
+            'tolerance': 'tolerence_limit_external',  # Fixed field name based on schema
+            'lastCalibration': 'last__calibration',   # Fixed field name based on schema
+            'nextCalibration': 'calibration__due',
+            'calibrationInterval': 'actual_calibration_interval',  # Fixed field name based on schema
+            'calibrationNumber': 'calibration_report_number',      # Fixed field name based on schema
+            'location': 'pic',  # Using pic field for location
+            'status': 'in_use'  # Using in_use field for status
+        }
+        
+        # Build the SQL update statement
+        update_fields = []
+        values = []
+        
+        for frontend_field, db_field in field_mapping.items():
+            if frontend_field in tool_data:
+                # Convert date formats if needed
+                if frontend_field in ['lastCalibration', 'nextCalibration']:
+                    value = convert_date_format(tool_data[frontend_field])
+                else:
+                    value = tool_data[frontend_field]
+                
+                update_fields.append(f"{db_field} = ?")
+                values.append(value)
+        
+        if not update_fields:
+            return jsonify({"error": "No fields to update"}), 400
+        
+        # Add the ID to the values list
+        values.append(tool_data['id'])
+        
+        # Execute the update query
+        cursor = conn.cursor()
+        # Use 'index' column instead of 'id'
+        query = f"UPDATE bosch_equipment SET {', '.join(update_fields)} WHERE \"index\" = ?"
+        
+        print(f"Executing query: {query}")
+        print(f"With values: {values}")
+        
+        cursor.execute(query, values)
+        conn.commit()
+        
+        # Check if any rows were affected
+        if cursor.rowcount == 0:
+            return jsonify({"error": f"No tool found with ID {tool_data['id']}"}), 404
+        
+        return jsonify({
+            "status": "success",
+            "message": "Tool updated successfully",
+            "updated_id": tool_data['id']
+        }), 200
+        
+    except Exception as e:
+        print(f"Error updating tool: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
 if __name__ == "__main__":
+    # Print database schema information
+    try:
+        conn = get_db_connection()
+        if conn:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(bosch_equipment)")
+            columns = cursor.fetchall()
+            print("\n=== Database Schema for bosch_equipment ===")
+            for column in columns:
+                print(f"Column: {column}")
+            
+            # Get a sample row to understand the data
+            cursor.execute("SELECT * FROM bosch_equipment LIMIT 1")
+            sample_row = cursor.fetchone()
+            if sample_row:
+                print("\n=== Sample Row ===")
+                for i, column in enumerate(columns):
+                    column_name = column[1]
+                    value = sample_row[i] if i < len(sample_row) else None
+                    print(f"{column_name}: {value}")
+            
+            conn.close()
+    except Exception as e:
+        print(f"Error getting schema information: {e}")
+    
     app.run(debug=True)

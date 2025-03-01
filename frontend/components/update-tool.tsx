@@ -52,20 +52,32 @@ export function UpdateTool() {
   };
   
   // Handle form submission
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      setIsSubmitting(false);
+  
+    try {
+      const response = await fetch("http://127.0.0.1:5000/api/update-tool", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
+      });
+  
+      if (!response.ok) {
+        throw new Error("Failed to update tool.");
+      }
+  
       setIsSuccess(true);
-      
-      // Reset success message after 3 seconds
       setTimeout(() => {
         setIsSuccess(false);
       }, 3000);
-    }, 1500);
+    } catch (error) {
+      console.error("Error updating tool:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
   
   return (

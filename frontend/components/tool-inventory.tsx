@@ -169,6 +169,7 @@ export function ToolInventory() {
   // Handle edit button click
   const handleEditClick = () => {
     if (selectedToolDetails) {
+      console.log("Selected tool details:", selectedToolDetails);
       setEditFormData({ 
         ...selectedToolDetails,
         // Map database field names to form field names for clarity
@@ -178,7 +179,9 @@ export function ToolInventory() {
         lastCalibration: selectedToolDetails.calibration_date,
         nextCalibration: selectedToolDetails.calibration__due,
         calibrationInterval: selectedToolDetails.calibration_interval,
-        calibrationNumber: selectedToolDetails.calibration_number
+        calibrationNumber: selectedToolDetails.calibration_number,
+        // Ensure id is included
+        id: selectedToolDetails.id
       });
       setIsEditing(true);
     }
@@ -190,13 +193,49 @@ export function ToolInventory() {
   };
   
   // Handle edit form submission
-  const handleEditSubmit = (e: React.FormEvent) => {
+  const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     
-    // Simulate API call
-    setTimeout(() => {
-      setIsSubmitting(false);
+    try {
+      // Send the updated data to the backend
+      const response = await fetch("http://127.0.0.1:5000/api/update-tool", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(editFormData),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to update tool");
+      }
+      
+      // Update the tools list with the updated tool data
+      setTools(prevTools => 
+        prevTools.map(tool => 
+          String(tool.id) === String(editFormData.id) 
+            ? {
+                ...tool,
+                description: editFormData.name,
+                serial_no: editFormData.serialNumber,
+                brand: editFormData.brand,
+                div: editFormData.division,
+                calibrator: editFormData.calibrator,
+                range: editFormData.range,
+                tolerance: editFormData.tolerance,
+                calibration_date: editFormData.lastCalibration,
+                calibration__due: editFormData.nextCalibration,
+                calibration_interval: editFormData.calibrationInterval,
+                calibration_number: editFormData.calibrationNumber,
+                location: editFormData.location,
+                status: editFormData.status
+              }
+            : tool
+        )
+      );
+      
       setIsSuccess(true);
       
       // Reset success message after 3 seconds
@@ -204,7 +243,17 @@ export function ToolInventory() {
         setIsSuccess(false);
         setIsEditing(false);
       }, 3000);
-    }, 1500);
+    } catch (error) {
+      console.error("Error updating tool:", error);
+      setError(error instanceof Error ? error.message : "An unknown error occurred");
+      
+      // Clear error after 5 seconds
+      setTimeout(() => {
+        setError(null);
+      }, 5000);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
   
   // Handle malfunction form input changes
@@ -435,8 +484,11 @@ export function ToolInventory() {
                       type="text"
                       value={editFormData.lastCalibration || ''}
                       onChange={(e) => handleEditChange("lastCalibration", e.target.value)}
-                      placeholder="MM/DD/YYYY"
+                      placeholder="DD-MMM-YY or DD/MM/YYYY"
                     />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Supported formats: 06-Jun-25, 06/06/2025, 06-June-2025
+                    </p>
                   </div>
                   
                   <div>
@@ -446,8 +498,11 @@ export function ToolInventory() {
                       type="text"
                       value={editFormData.nextCalibration || ''}
                       onChange={(e) => handleEditChange("nextCalibration", e.target.value)}
-                      placeholder="MM/DD/YYYY"
+                      placeholder="DD-MMM-YY or DD/MM/YYYY"
                     />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Supported formats: 06-Jun-25, 06/06/2025, 06-June-2025
+                    </p>
                   </div>
                   
                   <div>
