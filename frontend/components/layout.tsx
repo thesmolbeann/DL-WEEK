@@ -222,7 +222,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </SidebarMenuItem>
               {/* Update Tool button removed */}
             </SidebarMenu>
-            
+            {/* Hell */}
+            {/* lol */}
             {/* Upcoming Deadlines Section */}
             <SidebarGroup className="mt-6">
               <SidebarGroupLabel className="flex justify-between items-center text-sm font-bold text-red-600 dark:text-red-400">

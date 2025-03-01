@@ -8,6 +8,8 @@ import datetime
 app = Flask(__name__)
 CORS(app)
 
+#hi
+
 def get_db_connection():
     try:
         conn = sqlite3.connect('bosch.db')
