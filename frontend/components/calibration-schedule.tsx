@@ -1,55 +1,226 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 // Worker data type
 interface WorkerData {
-  name: string;
-  currentLoad: number;
+  pic: string;
+  old_workload: number;
   optimizedLoad?: number;
 }
+
+// Sample worker data for fallback
+const sampleWorkerData: WorkerData[] = [
+  { pic: "HE", old_workload: 75 },
+  { pic: "FE", old_workload: 90 },
+  { pic: "MA", old_workload: 80 },
+  { pic: "AP", old_workload: 65 },
+  { pic: "MY", old_workload: 55 },
+];
 
 export function CalibrationSchedule() {
   const [isOptimized, setIsOptimized] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-
-  // Sample data for workers and their workloads
-  const workerData: WorkerData[] = [
-    { name: "HE", currentLoad: 75, optimizedLoad: 65 },
-    { name: "FE", currentLoad: 90, optimizedLoad: 70 },
-    { name: "MA", currentLoad: 80, optimizedLoad: 75 },
-    { name: "AP", currentLoad: 65, optimizedLoad: 80 },
-    { name: "MY", currentLoad: 55, optimizedLoad: 75 },
-  ];
+  const [workerData, setWorkerData] = useState<WorkerData[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [useBackend, setUseBackend] = useState(true);
 
   // Find the maximum value for scaling
-  const maxCurrentValue = Math.max(...workerData.map(worker => worker.currentLoad));
+  const maxCurrentValue = Math.max(...workerData.map(worker => worker.old_workload));
   const maxOptimizedValue = Math.max(...workerData.map(worker => worker.optimizedLoad || 0));
-  const maxValue = Math.max(maxCurrentValue, maxOptimizedValue);
+  const maxValue = Math.max(maxCurrentValue, maxOptimizedValue, 100); // Ensure we have a minimum scale
 
-  // Function to simulate optimization
-  const handleOptimize = () => {
+  // Fetch initial worker data
+  useEffect(() => {
+    fetchWorkerData();
+  }, []);
+
+  // Function to fetch worker data from the backend
+  const fetchWorkerData = async () => {
+    if (!useBackend) {
+      setWorkerData(sampleWorkerData);
+      return;
+    }
+
+    try {
+      const response = await fetch('http://127.0.0.1:5000/api/worker-allocation', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch worker data');
+      }
+      
+      const data = await response.json();
+      
+      // Process the worker_allocation data
+      // Group by PIC and use old_workload
+      const picGroups: Record<string, any> = {};
+      
+      console.log("Backend response:", data);
+      
+      if (data.worker_allocation && Array.isArray(data.worker_allocation)) {
+        data.worker_allocation.forEach((item: any) => {
+          if (item.pic && !picGroups[item.pic]) {
+            picGroups[item.pic] = {
+              pic: item.pic,
+              old_workload: item.old_workload || 0
+            };
+          }
+        });
+        
+        // Convert to array format
+        const processedData = Object.values(picGroups);
+        console.log("Processed worker data:", processedData);
+        
+        if (processedData.length > 0) {
+          setWorkerData(processedData);
+          return;
+        }
+      }
+      
+      console.warn("Using sample data as fallback");
+      setError('No valid worker data received from backend. Using sample data as fallback.');
+      setUseBackend(false);
+      setWorkerData(sampleWorkerData);
+    } catch (err) {
+      console.error('Error fetching worker data:', err);
+      setError('Failed to load worker data from backend. Using sample data as fallback.');
+      setUseBackend(false); // Switch to fallback mode
+      setWorkerData(sampleWorkerData);
+    }
+  };
+
+  // Function to optimize worker allocation
+  const handleOptimize = async () => {
     setIsLoading(true);
+    setError(null);
     
-    // Simulate API call delay
-    setTimeout(() => {
+    if (!useBackend) {
+      // Use sample optimized data
+      setTimeout(() => {
+        const optimizedData = workerData.map(worker => ({
+          ...worker,
+          optimizedLoad: Math.max(50, Math.min(90, worker.old_workload * (0.9 + 0.2 * Math.random())))
+        }));
+        setWorkerData(optimizedData);
+        setIsOptimized(true);
+        setIsLoading(false);
+      }, 1000); // Simulate API delay
+      return;
+    }
+    
+    try {
+      const response = await fetch('http://127.0.0.1:5000/api/optimize-worker-allocation', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to optimize worker allocation');
+      }
+      
+      const data = await response.json();
+      
+      console.log("Optimize response:", data);
+      
+      if (data.optimized_worker_allocation && Array.isArray(data.optimized_worker_allocation)) {
+        // Process the optimized data
+        const optimizedData = workerData.map(worker => {
+          // Find the optimized load for this worker
+          const optimized = data.optimized_worker_allocation.find((item: any) => 
+            item[0] === worker.pic
+          );
+          
+          return {
+            ...worker,
+            optimizedLoad: optimized ? optimized[1] : worker.old_workload
+          };
+        });
+        
+        console.log("Processed optimized data:", optimizedData);
+        setWorkerData(optimizedData);
+        setIsOptimized(true);
+      } else {
+        throw new Error("Invalid optimized data format");
+      }
+    } catch (err) {
+      console.error('Error optimizing worker allocation:', err);
+      setError('Failed to optimize worker allocation. Using sample optimized data.');
+      
+      // Use sample optimized data
+      const optimizedData = workerData.map(worker => ({
+        ...worker,
+        optimizedLoad: Math.max(50, Math.min(90, worker.old_workload * (0.9 + 0.2 * Math.random())))
+      }));
+      setWorkerData(optimizedData);
       setIsOptimized(true);
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   // Function to confirm changes
-  const handleConfirmChanges = () => {
+  const handleConfirmChanges = async () => {
     setIsLoading(true);
+    setError(null);
     
-    // Simulate API call delay
-    setTimeout(() => {
-      // Here we would update the database with the new allocation
+    if (!useBackend) {
+      // Simulate update with optimized data
+      setTimeout(() => {
+        const updatedData = workerData.map(worker => ({
+          pic: worker.pic,
+          old_workload: worker.optimizedLoad || worker.old_workload
+        }));
+        
+        setWorkerData(updatedData);
+        setIsOptimized(false);
+        setIsLoading(false);
+        alert("Changes confirmed! (Simulated update with optimized data)");
+      }, 1000); // Simulate API delay
+      return;
+    }
+    
+    try {
+      const response = await fetch('http://127.0.0.1:5000/api/update-worker-allocation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to update worker allocation');
+      }
+      
+      // Refresh worker data
+      await fetchWorkerData();
+      setIsOptimized(false);
       alert("Changes confirmed! Database updated with new work allocation.");
+    } catch (err) {
+      console.error('Error confirming changes:', err);
+      setError('Failed to update worker allocation. Simulating update with optimized data.');
+      setUseBackend(false); // Switch to fallback mode
+      
+      // Simulate update with optimized data
+      const updatedData = workerData.map(worker => ({
+        pic: worker.pic,
+        old_workload: worker.optimizedLoad || worker.old_workload
+      }));
+      
+      setWorkerData(updatedData);
+      setIsOptimized(false);
+      alert("Changes confirmed! (Simulated update with optimized data)");
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   return (
@@ -73,7 +244,7 @@ export function CalibrationSchedule() {
                   <div
                     className="w-6 rounded-t-md bg-blue-300 dark:bg-blue-700 opacity-50"
                     style={{
-                      height: `${(worker.currentLoad / maxValue) * 200}px`,
+                      height: `${(worker.old_workload / maxValue) * 200}px`,
                     }}
                   ></div>
                   <div
@@ -89,15 +260,15 @@ export function CalibrationSchedule() {
                 <div
                   className="w-12 rounded-t-md"
                   style={{
-                    height: `${(worker.currentLoad / maxValue) * 200}px`,
+                    height: `${(worker.old_workload / maxValue) * 200}px`,
                     backgroundColor: getBarColor(index),
                   }}
                 ></div>
               )}
-              <div className="mt-2 text-sm font-medium">{worker.name}</div>
+              <div className="mt-2 text-sm font-medium">{worker.pic}</div>
               {isOptimized && (
                 <div className="text-xs mt-1">
-                  {worker.currentLoad} → {worker.optimizedLoad}
+                  {worker.old_workload} → {worker.optimizedLoad}
                 </div>
               )}
             </div>
@@ -138,8 +309,17 @@ export function CalibrationSchedule() {
         </div>
       </div>
       
+      {error && (
+        <Alert className="bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800 mt-4">
+          <AlertDescription>
+            <p className="font-medium">Error</p>
+            <p className="text-sm mt-1">{error}</p>
+          </AlertDescription>
+        </Alert>
+      )}
+      
       {isOptimized && (
-        <Alert className="bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800">
+        <Alert className="bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800 mt-4">
           <AlertDescription>
             <p className="font-medium">Optimization Results</p>
             <p className="text-sm mt-1">

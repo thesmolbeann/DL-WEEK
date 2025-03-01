@@ -5,11 +5,12 @@ import sqlite3
 import os
 import datetime
 import json
+import random
+import numpy as np
 
 app = Flask(__name__)
+# Simple CORS configuration
 CORS(app)
-
-#hi
 
 def get_db_connection():
     try:
@@ -401,6 +402,342 @@ def update_tool():
         if conn:
             conn.close()
 
+# get the count only for 1st graph
+@app.route('/api/worker-allocation', methods=['GET'])
+def get_worker_allocation():
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        # Fetch relevant data
+        query = "SELECT serial_no, pic, calibrator, calibration__due FROM bosch_equipment"
+        df = pd.read_sql_query(query, conn)
+
+        # Drop rows with missing essential values
+        df = df.dropna(subset=["serial_no", "pic"])
+
+        # Compute old_workload (count of serial_no per pic)
+        workload_df = df.groupby("pic")["serial_no"].count().reset_index()
+        workload_df.rename(columns={"serial_no": "old_workload"}, inplace=True)
+
+        # Merge workload count with main dataframe
+        merged_df = df.merge(workload_df, on="pic", how="left")
+
+        # Convert to JSON response
+        return jsonify({"worker_allocation": merged_df.to_dict(orient="records")}), 200
+
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/optimize-worker-allocation', methods=['GET'])      # graph
+def optimize_worker_allocation():
+    try:
+        # Get worker allocation data directly from the database
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        # Fetch relevant data
+        query = "SELECT serial_no, pic, calibrator, calibration__due FROM bosch_equipment"
+        df = pd.read_sql_query(query, conn)
+
+        # Drop rows with missing essential values
+        df = df.dropna(subset=["serial_no", "pic"])
+
+        # Compute old_workload (count of serial_no per pic)
+        workload_df = df.groupby("pic")["serial_no"].count().reset_index()
+        workload_df.rename(columns={"serial_no": "old_workload"}, inplace=True)
+
+        # Merge workload count with main dataframe
+        merged_df = df.merge(workload_df, on="pic", how="left")
+        
+        # Convert to dictionary for processing
+        data = merged_df.to_dict(orient="records")
+
+        # Extract unique workers and prepare calibration items
+        workers = list(set(item["pic"] for item in data))  # Unique workers
+        calibration_items = []
+        for item in data:
+            calibration_items.append((
+                item.get("calibrator", ""), 
+                item.get("serial_no", ""), 
+                item.get("calibration__due", ""), 
+                item.get("old_workload", 0)
+            ))
+
+        # Apply heuristic model
+        optimized_allocation = apply_heuristic_model(workers, calibration_items)
+
+        # Print for debugging
+        print("Workers:", workers)
+        print("Optimized allocation:", optimized_allocation)
+
+        # Prepare the optimized data to match serial_no and pic
+        result = optimized_allocation
+        return jsonify({"optimized_worker_allocation": result}), 200
+
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/update-worker-allocation', methods=['POST'])       # run model and update db
+def update_worker_allocation():
+    try:
+        # Get optimized allocation data directly from the database
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        # Fetch relevant data
+        query = "SELECT serial_no, pic, calibrator, calibration__due FROM bosch_equipment"
+        df = pd.read_sql_query(query, conn)
+
+        # Drop rows with missing essential values
+        df = df.dropna(subset=["serial_no", "pic"])
+
+        # Compute old_workload (count of serial_no per pic)
+        workload_df = df.groupby("pic")["serial_no"].count().reset_index()
+        workload_df.rename(columns={"serial_no": "old_workload"}, inplace=True)
+
+        # Merge workload count with main dataframe
+        merged_df = df.merge(workload_df, on="pic", how="left")
+        
+        # Convert to dictionary for processing
+        data = merged_df.to_dict(orient="records")
+
+        # Extract unique workers and prepare calibration items
+        workers = list(set(item["pic"] for item in data))  # Unique workers
+        calibration_items = []
+        for item in data:
+            calibration_items.append((
+                item.get("calibrator", ""), 
+                item.get("serial_no", ""), 
+                item.get("calibration__due", ""), 
+                item.get("old_workload", 0)
+            ))
+
+        # Apply heuristic model
+        optimized_data = apply_heuristic_model(workers, calibration_items)
+        if not optimized_data:
+            return jsonify({"error": "No optimized data available"}), 500
+
+        cursor = conn.cursor()
+
+        # Updating each serial_no with the corresponding optimized pic
+        update_query = "UPDATE bosch_equipment SET pic = ? WHERE serial_no = ?"
+        
+        for worker_id, optimized_load in optimized_data:
+            cursor.execute(update_query, (worker_id, optimized_load))
+
+        conn.commit()
+
+        return jsonify({"message": "Worker allocation updated successfully"}), 200
+
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+def apply_heuristic_model(workers, calibration_items):
+    """
+    Apply a heuristic model to optimize worker allocation based on:
+    1. Balancing workload among workers (highest priority)
+    2. Considering location grouping (calibrator) (higher priority)
+    3. Considering deadline grouping (calibration_due) (higher priority)
+    4. Ensuring each worker's workload is within ±5 tasks from average
+    
+    Returns a list of tuples (worker_id, optimized_load)
+    """
+    if not workers or len(workers) == 0:
+        return []
+    
+    # Initialize worker tracking
+    worker_data = {
+        worker: {
+            'assigned_load': 0,
+            'locations': set(),
+            'deadlines': set()
+        } for worker in workers
+    }
+    
+    # Current workloads
+    workloads = {worker: 0 for worker in workers}
+    
+    # Group tasks by location and deadline
+    task_groups = {}
+    for item in calibration_items:
+        calibrator, serial_no, due_date, _ = item
+        key = (calibrator, due_date)
+        if key not in task_groups:
+            task_groups[key] = []
+        task_groups[key].append(item)
+    
+    # Heuristic weights
+    w1 = 2.7  # Workload balancing (highest priority)
+    w2 = 2.0  # Location grouping (higher priority)
+    w3 = 2.3  # Deadline grouping (higher priority)
+    
+    # Function to get average workload
+    def get_avg_workload():
+        return int(sum(workloads.values()) / max(len(workloads), 1))
+    
+    # Heuristic function to score workers for a task
+    def heuristic(worker, location, due_date):
+        avg_workload = get_avg_workload()
+        
+        # Workload penalty: Higher deviation = higher penalty
+        workload_penalty = abs(workloads[worker] - avg_workload)
+        
+        # Location penalty: Prefer same location
+        location_penalty = 0 if location in worker_data[worker]['locations'] else 1
+        
+        # Deadline penalty: Reward workers with the same deadline
+        deadline_penalty = 0 if due_date in worker_data[worker]['deadlines'] else 1
+        deadline_reward = -0.5 if due_date in worker_data[worker]['deadlines'] else 0
+        
+        # Calculate total penalty
+        total_penalty = (w1 * workload_penalty) + (w2 * location_penalty) + (w3 * (deadline_penalty + deadline_reward))
+        
+        return total_penalty
+    
+    # Sort task groups by due date (earliest first)
+    sorted_task_groups = sorted(task_groups.items(), key=lambda x: x[0][1])
+    
+    # Assign tasks using heuristic scoring
+    new_assignments = []
+    for (location, due_date), group in sorted_task_groups:
+        for item in group:
+            # Pick the best worker using the heuristic
+            best_worker = min(workers, key=lambda w: heuristic(w, location, due_date))
+            
+            # Assign task to the best worker
+            new_assignments.append((best_worker, item[1]))  # (worker_id, serial_no)
+            
+            # Update worker data
+            workloads[best_worker] += 1  # Increment workload
+            worker_data[best_worker]['assigned_load'] += 1
+            worker_data[best_worker]['locations'].add(location)
+            worker_data[best_worker]['deadlines'].add(due_date)
+    
+    # Ensure minimum workload of 10 for each worker
+    min_workload = 10
+    total_items = sum(workloads.values())
+    
+    # First pass: identify workers below minimum
+    workers_below_min = [w for w in workers if workloads[w] < min_workload]
+    
+    if workers_below_min and total_items >= len(workers) * min_workload:
+        # Calculate how many items we need to redistribute
+        items_needed = sum(min_workload - workloads[w] for w in workers_below_min)
+        
+        # Identify workers who can give up items
+        donors = [w for w in workers if workloads[w] > min_workload]
+        
+        if donors:
+            # Calculate how many items each donor can give
+            items_to_take = {}
+            remaining_needed = items_needed
+            
+            # Sort donors by workload (highest first)
+            sorted_donors = sorted(donors, key=lambda w: workloads[w], reverse=True)
+            
+            for donor in sorted_donors:
+                # Calculate how many items this donor can give
+                available = workloads[donor] - min_workload
+                to_take = min(available, remaining_needed)
+                
+                if to_take > 0:
+                    items_to_take[donor] = to_take
+                    remaining_needed -= to_take
+                
+                if remaining_needed <= 0:
+                    break
+            
+            # Redistribute items
+            for donor, to_take in items_to_take.items():
+                workloads[donor] -= to_take
+                
+                # Distribute to workers below minimum
+                for recipient in workers_below_min:
+                    needed = min_workload - workloads[recipient]
+                    if needed > 0:
+                        given = min(needed, to_take)
+                        workloads[recipient] += given
+                        to_take -= given
+                    
+                    if to_take <= 0:
+                        break
+    
+    # Rebalance workload to ensure each worker is within ±5 tasks from average
+    avg_workload = get_avg_workload()
+    max_deviation = 5  # Maximum allowed deviation from average
+    
+    # Identify workers outside the allowed range
+    overloaded_workers = [w for w in workers if workloads[w] > avg_workload + max_deviation]
+    underloaded_workers = [w for w in workers if workloads[w] < avg_workload - max_deviation]
+    
+    # Only proceed with rebalancing if there are workers outside the allowed range
+    if overloaded_workers and underloaded_workers:
+        print(f"Rebalancing workload: Average = {avg_workload}, Allowed range = [{avg_workload - max_deviation}, {avg_workload + max_deviation}]")
+        print(f"Overloaded workers: {overloaded_workers}")
+        print(f"Underloaded workers: {underloaded_workers}")
+        
+        # Sort workers by workload (highest to lowest for overloaded, lowest to highest for underloaded)
+        overloaded_workers.sort(key=lambda w: workloads[w], reverse=True)
+        underloaded_workers.sort(key=lambda w: workloads[w])
+        
+        # Redistribute tasks from overloaded to underloaded workers
+        for donor in overloaded_workers:
+            # Calculate how many tasks need to be redistributed
+            excess = workloads[donor] - (avg_workload + max_deviation)
+            
+            if excess <= 0:
+                continue  # Skip if worker is now within range
+            
+            print(f"Worker {donor} needs to give up {excess} tasks")
+            
+            # Redistribute to underloaded workers
+            for recipient in underloaded_workers:
+                # Calculate how many tasks this recipient can take
+                deficit = (avg_workload - max_deviation) - workloads[recipient]
+                
+                if deficit <= 0:
+                    continue  # Skip if worker is now within range
+                
+                # Transfer tasks
+                transfer = min(excess, deficit)
+                workloads[donor] -= transfer
+                workloads[recipient] += transfer
+                excess -= transfer
+                
+                print(f"Transferred {transfer} tasks from {donor} to {recipient}")
+                
+                if excess <= 0:
+                    break  # Done redistributing from this donor
+    
+    # Calculate final workload distribution
+    final_workloads = [(worker, workloads[worker]) for worker in workers]
+    
+    # Print for debugging
+    print("Initial workloads:", {w: 0 for w in workers})
+    print("Final workloads after rebalancing:", dict(final_workloads))
+    print("Average workload:", avg_workload)
+    print("Allowed range:", [avg_workload - max_deviation, avg_workload + max_deviation])
+    print("Total items before:", len(calibration_items))
+    print("Total items after:", sum(load for _, load in final_workloads))
+    
+    return final_workloads
+
 if __name__ == "__main__":
     # Print database schema information
     try:
@@ -428,3 +765,4 @@ if __name__ == "__main__":
         print(f"Error getting schema information: {e}")
     
     app.run(debug=True)
+
