@@ -30,7 +30,7 @@ curl http://localhost:5000/api/view-data
 Install dependencies
 ```bash
 cd frontend
-npm install
+npm install --legacy-peer-deps
 ```
 
 Spin up the frontend
